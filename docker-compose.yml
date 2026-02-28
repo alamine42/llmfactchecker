@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  factcheck:
+    build:
+      context: ./packages/factcheck
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - FACTCHECK_DEBUG=true
+      - FACTCHECK_CORS_ORIGINS=["http://localhost:3000"]
+    volumes:
+      - ./packages/factcheck/src:/app/src:ro
+    command: uvicorn factcheck.main:app --host 0.0.0.0 --port 8000 --reload
