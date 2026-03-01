@@ -1575,66 +1575,140 @@ export class OverlayManager {
 
       /* ============================================
          INLINE CLAIM HIGHLIGHTS
-         Premium underline system with refined states
-         Uses background gradients for multi-line support
+         World-class underline system with Stripe-level polish
+         Spring physics, gradient underlines, and micro-interactions
       ============================================ */
 
-      /* Highlight color tokens */
+      /* Highlight color tokens - refined palette */
       .${CSS_PREFIX}-claim-highlight {
-        --highlight-verified: #10b981;
-        --highlight-verified-light: #34d399;
-        --highlight-verified-glow: rgba(16, 185, 129, 0.15);
-        --highlight-disputed: #ef4444;
-        --highlight-disputed-light: #f87171;
-        --highlight-disputed-glow: rgba(239, 68, 68, 0.15);
-        --highlight-pending: #6366f1;
-        --highlight-pending-light: #818cf8;
-        --highlight-pending-glow: rgba(99, 102, 241, 0.15);
+        /* Verified - confident green */
+        --highlight-verified: #059669;
+        --highlight-verified-light: #10b981;
+        --highlight-verified-glow: rgba(5, 150, 105, 0.12);
+        --highlight-verified-border: rgba(16, 185, 129, 0.3);
+
+        /* Disputed - attention red */
+        --highlight-disputed: #dc2626;
+        --highlight-disputed-light: #ef4444;
+        --highlight-disputed-glow: rgba(220, 38, 38, 0.12);
+        --highlight-disputed-border: rgba(239, 68, 68, 0.3);
+
+        /* Pending - active indigo */
+        --highlight-pending: #4f46e5;
+        --highlight-pending-light: #6366f1;
+        --highlight-pending-glow: rgba(79, 70, 229, 0.12);
+        --highlight-pending-border: rgba(99, 102, 241, 0.3);
+
+        /* Unverified - neutral gray */
         --highlight-unverified: #6b7280;
-        --highlight-none: #d1d5db;
-        --highlight-error: #f59e0b;
-        --highlight-error-light: #fbbf24;
+        --highlight-unverified-light: #9ca3af;
+        --highlight-unverified-glow: rgba(107, 114, 128, 0.08);
+
+        /* None - invitation purple */
+        --highlight-none: #8b5cf6;
+        --highlight-none-light: #a78bfa;
+        --highlight-none-glow: rgba(139, 92, 246, 0.06);
+
+        /* Error - warning amber */
+        --highlight-error: #d97706;
+        --highlight-error-light: #f59e0b;
+        --highlight-error-glow: rgba(217, 119, 6, 0.1);
 
         position: relative;
         display: inline;
         cursor: pointer;
-        border-radius: 2px;
+        border-radius: 3px;
         /* Horizontal padding only - no vertical padding to avoid line height changes */
-        padding: 0 2px;
-        margin: 0 -2px;
+        padding: 0 3px;
+        margin: 0 -3px;
+        /* Spring-based transitions for natural motion */
         transition:
-          background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-          box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+          box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
         text-decoration: none;
         /* Critical: enables per-line rendering for multi-line claims */
         -webkit-box-decoration-break: clone;
         box-decoration-break: clone;
+        /* Optimize for animations */
+        will-change: background-color, box-shadow;
+        transform: translateZ(0);
       }
 
-      /* Verified state - confident green gradient underline */
+      /* Ripple effect container */
+      .${CSS_PREFIX}-claim-ripple {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.25;
+        transform: translate(-50%, -50%) scale(0);
+        animation: gc-ripple 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        pointer-events: none;
+      }
+
+      @keyframes gc-ripple {
+        to {
+          transform: translate(-50%, -50%) scale(4);
+          opacity: 0;
+        }
+      }
+
+      /* Entrance animation class */
+      .${CSS_PREFIX}-claim-highlight--entering {
+        animation: gc-highlight-enter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        animation-delay: var(--gc-entrance-delay, 0ms);
+      }
+
+      @keyframes gc-highlight-enter {
+        0% {
+          opacity: 0;
+          background-size: 0% 2px, auto;
+        }
+        100% {
+          opacity: 1;
+          background-size: 100% 2px, auto;
+        }
+      }
+
+      /* Pressed state */
+      .${CSS_PREFIX}-claim-highlight--pressed {
+        transform: scale(0.995);
+        transition-duration: 50ms;
+      }
+
+      /* Active state */
+      .${CSS_PREFIX}-claim-highlight--active {
+        background-color: rgba(99, 102, 241, 0.15);
+      }
+
+      /* Verified state - confident green gradient underline with glow */
       .${CSS_PREFIX}-claim-highlight--verified {
         background:
-          linear-gradient(to right, var(--highlight-verified), var(--highlight-verified-light)) bottom / 100% 2px no-repeat,
+          linear-gradient(90deg, var(--highlight-verified), var(--highlight-verified-light)) bottom / 100% 2.5px no-repeat,
           transparent;
       }
 
       .${CSS_PREFIX}-claim-highlight--verified:hover {
         background:
-          linear-gradient(to right, var(--highlight-verified), var(--highlight-verified-light)) bottom / 100% 3px no-repeat,
+          linear-gradient(90deg, var(--highlight-verified), var(--highlight-verified-light)) bottom / 100% 3px no-repeat,
           var(--highlight-verified-glow);
+        box-shadow: inset 0 -1px 0 var(--highlight-verified-border);
       }
 
       /* Disputed state - attention red gradient underline */
       .${CSS_PREFIX}-claim-highlight--disputed {
         background:
-          linear-gradient(to right, var(--highlight-disputed), var(--highlight-disputed-light)) bottom / 100% 2px no-repeat,
+          linear-gradient(90deg, var(--highlight-disputed), var(--highlight-disputed-light)) bottom / 100% 2.5px no-repeat,
           transparent;
       }
 
       .${CSS_PREFIX}-claim-highlight--disputed:hover {
         background:
-          linear-gradient(to right, var(--highlight-disputed), var(--highlight-disputed-light)) bottom / 100% 3px no-repeat,
+          linear-gradient(90deg, var(--highlight-disputed), var(--highlight-disputed-light)) bottom / 100% 3px no-repeat,
           var(--highlight-disputed-glow);
+        box-shadow: inset 0 -1px 0 var(--highlight-disputed-border);
       }
 
       /* Pending state - animated shimmer underline */
@@ -1644,11 +1718,13 @@ export class OverlayManager {
             90deg,
             var(--highlight-pending),
             var(--highlight-pending-light),
+            var(--highlight-pending),
+            var(--highlight-pending-light),
             var(--highlight-pending)
-          ) bottom / 200% 2px no-repeat,
-          transparent;
-        background-size: 200% 2px, auto;
-        animation: ${CSS_PREFIX}-shimmer 2s ease-in-out infinite;
+          ) bottom / 300% 2.5px no-repeat,
+          var(--highlight-pending-glow);
+        background-size: 300% 2.5px, auto;
+        animation: ${CSS_PREFIX}-shimmer 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
       }
 
       .${CSS_PREFIX}-claim-highlight--pending:hover {
@@ -1657,135 +1733,207 @@ export class OverlayManager {
             90deg,
             var(--highlight-pending),
             var(--highlight-pending-light),
+            var(--highlight-pending),
+            var(--highlight-pending-light),
             var(--highlight-pending)
-          ) bottom / 200% 3px no-repeat,
-          var(--highlight-pending-glow);
-        background-size: 200% 3px, auto;
+          ) bottom / 300% 3.5px no-repeat,
+          rgba(79, 70, 229, 0.15);
+        background-size: 300% 3.5px, auto;
       }
 
       @keyframes ${CSS_PREFIX}-shimmer {
-        0%, 100% { background-position: 0% bottom, center; }
-        50% { background-position: 100% bottom, center; }
+        0% { background-position: 100% bottom, center; }
+        100% { background-position: -100% bottom, center; }
       }
 
-      /* Unverified state - subtle gray underline */
+      /* Unverified state - subtle gray underline with soft presence */
       .${CSS_PREFIX}-claim-highlight--unverified {
         background:
-          linear-gradient(to right, var(--highlight-unverified), var(--highlight-unverified)) bottom / 100% 2px no-repeat,
-          transparent;
-        opacity: 0.85;
+          linear-gradient(90deg, var(--highlight-unverified), var(--highlight-unverified-light)) bottom / 100% 2px no-repeat,
+          var(--highlight-unverified-glow);
       }
 
       .${CSS_PREFIX}-claim-highlight--unverified:hover {
         background:
-          linear-gradient(to right, var(--highlight-unverified), var(--highlight-unverified)) bottom / 100% 2px no-repeat,
-          rgba(107, 114, 128, 0.06);
-        opacity: 1;
+          linear-gradient(90deg, var(--highlight-unverified), var(--highlight-unverified-light)) bottom / 100% 2.5px no-repeat,
+          rgba(107, 114, 128, 0.1);
       }
 
-      /* None state - dashed invitation to verify */
+      /* None state - animated dashed invitation to verify */
       .${CSS_PREFIX}-claim-highlight--none {
         background:
           repeating-linear-gradient(
             90deg,
             var(--highlight-none) 0,
-            var(--highlight-none) 4px,
-            transparent 4px,
-            transparent 8px
+            var(--highlight-none) 5px,
+            transparent 5px,
+            transparent 10px
           ) bottom / 100% 2px no-repeat,
-          transparent;
+          var(--highlight-none-glow);
+        animation: ${CSS_PREFIX}-dash-slide 8s linear infinite;
       }
 
       .${CSS_PREFIX}-claim-highlight--none:hover {
         background:
-          linear-gradient(to right, var(--highlight-pending), var(--highlight-pending)) bottom / 100% 2px no-repeat,
-          rgba(99, 102, 241, 0.04);
+          linear-gradient(90deg, var(--highlight-none), var(--highlight-none-light)) bottom / 100% 2.5px no-repeat,
+          rgba(139, 92, 246, 0.1);
+        animation: none;
+      }
+
+      @keyframes ${CSS_PREFIX}-dash-slide {
+        0% { background-position: 0 bottom, center; }
+        100% { background-position: 40px bottom, center; }
       }
 
       /* Error state - warning amber pulsing underline */
       .${CSS_PREFIX}-claim-highlight--error {
         background:
-          linear-gradient(to right, var(--highlight-error), var(--highlight-error-light)) bottom / 100% 2px no-repeat,
-          transparent;
-        animation: ${CSS_PREFIX}-error-pulse 1s ease-in-out infinite;
+          linear-gradient(90deg, var(--highlight-error), var(--highlight-error-light)) bottom / 100% 2.5px no-repeat,
+          var(--highlight-error-glow);
+        animation: ${CSS_PREFIX}-error-pulse 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
       }
 
       .${CSS_PREFIX}-claim-highlight--error:hover {
         background:
-          linear-gradient(to right, var(--highlight-error), var(--highlight-error-light)) bottom / 100% 3px no-repeat,
-          rgba(245, 158, 11, 0.08);
+          linear-gradient(90deg, var(--highlight-error), var(--highlight-error-light)) bottom / 100% 3px no-repeat,
+          rgba(217, 119, 6, 0.15);
       }
 
       @keyframes ${CSS_PREFIX}-error-pulse {
         0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
+        50% { opacity: 0.65; }
       }
 
-      /* Focus state - premium ring */
+      /* Focus state - premium double ring */
       .${CSS_PREFIX}-claim-highlight:focus {
         outline: none;
       }
 
       .${CSS_PREFIX}-claim-highlight:focus-visible {
         outline: none;
-        background-color: rgba(99, 102, 241, 0.08);
+        background-color: rgba(79, 70, 229, 0.1);
         box-shadow:
           0 0 0 2px white,
-          0 0 0 4px var(--highlight-pending);
-        border-radius: 3px;
+          0 0 0 4px var(--highlight-pending),
+          0 0 12px rgba(79, 70, 229, 0.25);
+        border-radius: 4px;
       }
 
       /* Dark mode adjustments */
       @media (prefers-color-scheme: dark) {
+        .${CSS_PREFIX}-claim-highlight {
+          --highlight-verified-glow: rgba(16, 185, 129, 0.15);
+          --highlight-disputed-glow: rgba(239, 68, 68, 0.15);
+          --highlight-pending-glow: rgba(99, 102, 241, 0.15);
+          --highlight-unverified-glow: rgba(107, 114, 128, 0.1);
+          --highlight-none-glow: rgba(139, 92, 246, 0.08);
+          --highlight-error-glow: rgba(245, 158, 11, 0.12);
+        }
+
         .${CSS_PREFIX}-claim-highlight--verified:hover,
         .${CSS_PREFIX}-claim-highlight--disputed:hover,
         .${CSS_PREFIX}-claim-highlight--pending:hover {
-          background-color: rgba(255, 255, 255, 0.05);
+          background-color: rgba(255, 255, 255, 0.06);
         }
 
         .${CSS_PREFIX}-claim-highlight:focus-visible {
           box-shadow:
-            0 0 0 2px #1e1e2e,
-            0 0 0 4px var(--highlight-pending);
+            0 0 0 2px #1a1a2e,
+            0 0 0 4px var(--highlight-pending),
+            0 0 12px rgba(99, 102, 241, 0.3);
         }
       }
 
-      /* Reduced motion */
+      /* Reduced motion - disable all animations but keep visual states */
       @media (prefers-reduced-motion: reduce) {
         .${CSS_PREFIX}-claim-highlight {
-          transition: none;
-          animation: none;
+          transition: background-color 0s, box-shadow 0s;
+          animation: none !important;
+        }
+
+        .${CSS_PREFIX}-claim-highlight--pending {
+          background-size: 100% 2.5px, auto;
+        }
+
+        .${CSS_PREFIX}-claim-highlight--none {
+          background:
+            repeating-linear-gradient(
+              90deg,
+              var(--highlight-none) 0,
+              var(--highlight-none) 5px,
+              transparent 5px,
+              transparent 10px
+            ) bottom / 100% 2px no-repeat,
+            var(--highlight-none-glow);
+        }
+
+        .${CSS_PREFIX}-claim-ripple {
+          display: none;
         }
       }
 
       /* ============================================
-         MOBILE / TOUCH OPTIMIZATION
+         MOBILE / TOUCH OPTIMIZATION - 44PX TARGETS
       ============================================ */
       @media (hover: none) and (pointer: coarse) {
         .${CSS_PREFIX}-claim-highlight {
-          /* Horizontal padding only - preserve line height */
-          padding: 0 6px;
-          margin: 0 -6px;
-          border-radius: 4px;
+          /* Keep as inline to preserve paragraph flow */
+          position: relative;
+        }
+
+        /* Use pseudo-element for expanded touch target without disrupting layout */
+        .${CSS_PREFIX}-claim-highlight::before {
+          content: '';
+          position: absolute;
+          top: -12px;
+          bottom: -12px;
+          left: -8px;
+          right: -8px;
+          /* This creates ~44px touch target for typical line heights */
         }
 
         /* Thicker underline for touch visibility */
         .${CSS_PREFIX}-claim-highlight--verified,
         .${CSS_PREFIX}-claim-highlight--disputed,
         .${CSS_PREFIX}-claim-highlight--pending,
-        .${CSS_PREFIX}-claim-highlight--error {
-          background-size: 100% 3px, auto;
+        .${CSS_PREFIX}-claim-highlight--error,
+        .${CSS_PREFIX}-claim-highlight--unverified {
+          background-size: 100% 3.5px, auto;
         }
 
-        /* Active state replaces hover */
+        /* Active state replaces hover - haptic feel */
         .${CSS_PREFIX}-claim-highlight:active {
-          background-color: rgba(99, 102, 241, 0.12);
-          transform: scale(0.99);
+          background-color: rgba(79, 70, 229, 0.15);
+          transform: scale(0.98);
+          transition-duration: 50ms;
         }
 
         /* Disable hover effects on touch */
         .${CSS_PREFIX}-claim-highlight:hover {
-          background-color: transparent;
+          background-color: inherit;
+          box-shadow: none;
+        }
+
+        /* Disable animations for battery on mobile */
+        .${CSS_PREFIX}-claim-highlight--pending,
+        .${CSS_PREFIX}-claim-highlight--none,
+        .${CSS_PREFIX}-claim-highlight--error {
+          animation: none;
+        }
+
+        .${CSS_PREFIX}-claim-highlight--pending {
+          background-size: 100% 3.5px, auto;
+        }
+      }
+
+      /* ============================================
+         SMALL SCREENS - COMPACT OPTIMIZATIONS
+      ============================================ */
+      @media (max-width: 480px) {
+        .${CSS_PREFIX}-claim-highlight {
+          padding: 0 6px;
+          margin: 0 -6px;
+          border-radius: 4px;
         }
       }
     `

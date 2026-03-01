@@ -89,8 +89,13 @@ export class HighlightManager {
       return bStart - aStart // Reverse order
     })
 
-    for (const claim of sortedClaims) {
-      this.highlightSingleClaim(contentElement, claim, originalText)
+    // Track animation index - reversed so first claim in reading order animates first
+    const totalClaims = sortedClaims.length
+    for (let i = 0; i < totalClaims; i++) {
+      const claim = sortedClaims[i]
+      // Reverse the animation index so top-to-bottom reading order gets staggered correctly
+      const animationIndex = totalClaims - 1 - i
+      this.highlightSingleClaim(contentElement, claim, originalText, animationIndex)
     }
 
     // Start observing mutations for this element
@@ -103,7 +108,8 @@ export class HighlightManager {
   private highlightSingleClaim(
     container: HTMLElement,
     claim: VerifiedClaim,
-    originalText: string
+    originalText: string,
+    responseClaimIndex: number = 0
   ): void {
     console.log('[GroundCheck] Highlighting claim:', claim.text.slice(0, 50), '...')
     console.log('[GroundCheck] Claim sourceOffset:', claim.sourceOffset)
@@ -137,8 +143,8 @@ export class HighlightManager {
 
     range.claimId = claim.id
 
-    // Create highlight wrapper
-    const wrapper = this.wrapClaimText(range, claim)
+    // Create highlight wrapper - pass responseClaimIndex for staggered animation
+    const wrapper = this.wrapClaimText(range, claim, responseClaimIndex)
     if (!wrapper) {
       console.warn('[GroundCheck] Could not create wrapper for claim')
       return
@@ -175,8 +181,13 @@ export class HighlightManager {
 
   /**
    * Wrap claim text in a highlight span
+   * Enhanced with staggered entrance animations and haptic-style feedback
    */
-  private wrapClaimText(range: ClaimRange, claim: VerifiedClaim): HTMLElement | null {
+  private wrapClaimText(
+    range: ClaimRange,
+    claim: VerifiedClaim,
+    responseClaimIndex: number = 0
+  ): HTMLElement | null {
     try {
       // Create a DOM Range
       const domRange = document.createRange()
@@ -194,8 +205,22 @@ export class HighlightManager {
       const statusDescription = this.getStatusDescription(claim.verification?.status)
       wrapper.setAttribute('aria-label', `Claim: ${claim.text}. ${statusDescription}`)
 
+      // Add staggered entrance animation delay based on position within current response
+      // Cap at 400ms so animations remain snappy
+      const entranceDelay = Math.min(responseClaimIndex * 80, 400)
+      wrapper.style.setProperty('--gc-entrance-delay', `${entranceDelay}ms`)
+
       // Wrap the content
       domRange.surroundContents(wrapper)
+
+      // Trigger entrance animation after DOM insertion
+      requestAnimationFrame(() => {
+        wrapper.classList.add(`${CSS_PREFIX}-claim-highlight--entering`)
+        // Remove entrance class after animation completes
+        setTimeout(() => {
+          wrapper.classList.remove(`${CSS_PREFIX}-claim-highlight--entering`)
+        }, 400 + entranceDelay)
+      })
 
       return wrapper
     } catch (error) {
@@ -241,30 +266,103 @@ export class HighlightManager {
 
   /**
    * Set up event listeners for a highlighted claim
+   * Enhanced with micro-interactions and visual feedback
    */
   private setupClaimEventListeners(wrapper: HTMLElement, claim: VerifiedClaim): void {
-    // Click handler
+    // Track interaction state
+    let isPressed = false
+
+    // Click handler with ripple effect
     wrapper.addEventListener('click', (e) => {
       e.stopPropagation()
+      this.triggerClickFeedback(wrapper, e)
       this.callbacks.onClaimClick?.(claim.id, claim)
     })
 
-    // Keyboard handler
+    // Enhanced keyboard handler with visual feedback
     wrapper.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
+        wrapper.classList.add(`${CSS_PREFIX}-claim-highlight--active`)
         this.callbacks.onClaimClick?.(claim.id, claim)
+        setTimeout(() => {
+          wrapper.classList.remove(`${CSS_PREFIX}-claim-highlight--active`)
+        }, 150)
       }
     })
 
-    // Hover handlers
+    // Mouse down/up for pressed state
+    wrapper.addEventListener('mousedown', () => {
+      isPressed = true
+      wrapper.classList.add(`${CSS_PREFIX}-claim-highlight--pressed`)
+    })
+
+    wrapper.addEventListener('mouseup', () => {
+      if (isPressed) {
+        isPressed = false
+        wrapper.classList.remove(`${CSS_PREFIX}-claim-highlight--pressed`)
+      }
+    })
+
+    wrapper.addEventListener('mouseleave', () => {
+      if (isPressed) {
+        isPressed = false
+        wrapper.classList.remove(`${CSS_PREFIX}-claim-highlight--pressed`)
+      }
+      this.callbacks.onClaimHover?.(claim.id, claim, false)
+    })
+
+    // Hover handlers with enhanced states
     wrapper.addEventListener('mouseenter', () => {
       this.callbacks.onClaimHover?.(claim.id, claim, true)
     })
 
-    wrapper.addEventListener('mouseleave', () => {
-      this.callbacks.onClaimHover?.(claim.id, claim, false)
-    })
+    // Touch support for mobile with haptic-style feedback
+    wrapper.addEventListener(
+      'touchstart',
+      () => {
+        wrapper.classList.add(`${CSS_PREFIX}-claim-highlight--pressed`)
+      },
+      { passive: true }
+    )
+
+    wrapper.addEventListener(
+      'touchend',
+      () => {
+        wrapper.classList.remove(`${CSS_PREFIX}-claim-highlight--pressed`)
+      },
+      { passive: true }
+    )
+
+    wrapper.addEventListener(
+      'touchcancel',
+      () => {
+        wrapper.classList.remove(`${CSS_PREFIX}-claim-highlight--pressed`)
+      },
+      { passive: true }
+    )
+  }
+
+  /**
+   * Create subtle click feedback animation
+   */
+  private triggerClickFeedback(wrapper: HTMLElement, event: MouseEvent): void {
+    // Skip on touch devices - they have their own feedback
+    if ('ontouchstart' in window) return
+
+    const rect = wrapper.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
+
+    // Create ripple element
+    const ripple = document.createElement('span')
+    ripple.className = `${CSS_PREFIX}-claim-ripple`
+    ripple.style.left = `${x}px`
+    ripple.style.top = `${y}px`
+    wrapper.appendChild(ripple)
+
+    // Remove after animation
+    setTimeout(() => ripple.remove(), 600)
   }
 
   /**

@@ -9,6 +9,7 @@ import { ChatGPTObserver } from './chatgpt/observer'
 import { isTextFactCheckable } from './chatgpt/extractor'
 import { OverlayManager } from './ui/overlay'
 import { HighlightManager } from './ui/highlight-manager'
+import { SidebarManager } from './ui/sidebar'
 
 if (config.isDev) {
   console.log('[GroundCheck] Content script loaded on:', window.location.href)
@@ -87,19 +88,81 @@ function initialize(): void {
 
 function initializeChatGPT(): void {
   const overlay = new OverlayManager()
+  const sidebar = new SidebarManager()
   const highlightManager = new HighlightManager({
     showIndicatorBadge: true,
     showUnderline: true,
     autoVerify: false,
   })
 
+  // Set up sidebar callbacks
+  sidebar.setCallbacks({
+    onVerifyRequest: async (claimId, claim) => {
+      sidebar.setVerifying(claimId, true)
+      try {
+        const response = await new Promise<MessageResponse>((resolve) => {
+          chrome.runtime.sendMessage(
+            {
+              type: 'VERIFY_CLAIM',
+              payload: {
+                claimId,
+                claimText: claim.text,
+                claimType: claim.type,
+              },
+            },
+            resolve
+          )
+        })
+
+        if (response.status === 'ok' && response.data) {
+          const verifyResponse = response.data as VerifyClaimResponse
+          // Update both highlight manager and sidebar
+          highlightManager.updateClaimStatus(claimId, verifyResponse.verification)
+          sidebar.updateClaimStatus(claimId, verifyResponse.verification)
+        } else {
+          // Surface error state to the UI
+          const errorVerification = {
+            status: 'error' as const,
+            sources: [],
+            confidence: 0,
+            verifiedAt: new Date().toISOString(),
+          }
+          highlightManager.updateClaimStatus(claimId, errorVerification)
+          sidebar.updateClaimStatus(claimId, errorVerification)
+        }
+      } catch (error) {
+        if (config.isDev) {
+          console.error('[GroundCheck] Error verifying claim from sidebar:', error)
+        }
+        // Surface error state to the UI
+        const errorVerification = {
+          status: 'error' as const,
+          sources: [],
+          confidence: 0,
+          verifiedAt: new Date().toISOString(),
+        }
+        highlightManager.updateClaimStatus(claimId, errorVerification)
+        sidebar.updateClaimStatus(claimId, errorVerification)
+      }
+      sidebar.setVerifying(claimId, false)
+    },
+    onClose: () => {
+      if (config.isDev) {
+        console.log('[GroundCheck] Sidebar closed')
+      }
+    },
+  })
+
   // Set up highlight event callbacks
   highlightManager.setCallbacks({
     onClaimClick: (claimId, claim) => {
-      // Show claim details in the overlay panel
+      // Get all claims for this response and open sidebar
       const responseId = findResponseIdForClaim(claimId)
       if (responseId) {
-        overlay.showClaimDetails(responseId, [claim])
+        const allClaims = highlightManager.getClaimsForResponse(responseId)
+        sidebar.show(claim, allClaims)
+      } else {
+        sidebar.show(claim)
       }
     },
     onClaimHover: (_claimId, _claim, _isHovering) => {
@@ -107,7 +170,7 @@ function initializeChatGPT(): void {
     },
     onVerificationRequest: async (claimId, claim) => {
       // Auto-verify when requested
-      await verifyClaimAndUpdateHighlight(claimId, claim, highlightManager)
+      await verifyClaimAndUpdateHighlight(claimId, claim, highlightManager, sidebar)
     },
   })
 
@@ -131,7 +194,8 @@ function initializeChatGPT(): void {
   async function verifyClaimAndUpdateHighlight(
     claimId: string,
     claim: { text: string; type: string },
-    manager: HighlightManager
+    manager: HighlightManager,
+    sidebarManager?: SidebarManager
   ): Promise<void> {
     try {
       const response = await new Promise<MessageResponse>((resolve) => {
@@ -151,6 +215,8 @@ function initializeChatGPT(): void {
       if (response.status === 'ok' && response.data) {
         const verifyResponse = response.data as VerifyClaimResponse
         manager.updateClaimStatus(claimId, verifyResponse.verification)
+        // Also update sidebar if it's showing this claim
+        sidebarManager?.updateClaimStatus(claimId, verifyResponse.verification)
       }
     } catch (error) {
       if (config.isDev) {
@@ -224,6 +290,7 @@ function initializeChatGPT(): void {
     observer.stop()
     overlay.clear()
     highlightManager.clearAll()
+    sidebar.hide()
   })
 }
 

@@ -99,24 +99,24 @@ epics:
   - id: sprint-4
     title: "Sprint 4: Sidebar & Source Display"
     priority: 5
-    status: open
+    status: completed
     description: "Click indicator to open sidebar showing full verification details and sources"
     tasks:
       - id: "4.1"
         title: "Sidebar Component"
-        status: open
+        status: completed
         description: "Slide-in panel, animations, close button, responsive, keyboard navigation"
       - id: "4.2"
         title: "Claim Detail View"
-        status: open
+        status: completed
         description: "ClaimCard, SourceCard components, confidence score, snippets with expand"
       - id: "4.3"
         title: "Sidebar State Management"
-        status: open
+        status: completed
         description: "State store, indicator click handling, active claim highlight, re-verify button"
       - id: "4.4"
         title: "Empty & Error States"
-        status: open
+        status: completed
         description: "No claims found state, verification failed state, retry button"
 
   - id: sprint-5
