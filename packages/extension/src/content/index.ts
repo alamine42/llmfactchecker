@@ -1,8 +1,14 @@
 import { config } from '@/shared/config'
-import type { ExtractClaimsRequest, ExtractClaimsResponse, MessageResponse } from '@/shared/types'
+import type {
+  ExtractClaimsRequest,
+  ExtractClaimsResponse,
+  MessageResponse,
+  VerifyClaimResponse,
+} from '@/shared/types'
 import { ChatGPTObserver } from './chatgpt/observer'
 import { isTextFactCheckable } from './chatgpt/extractor'
 import { OverlayManager } from './ui/overlay'
+import { HighlightManager } from './ui/highlight-manager'
 
 if (config.isDev) {
   console.log('[GroundCheck] Content script loaded on:', window.location.href)
@@ -81,6 +87,77 @@ function initialize(): void {
 
 function initializeChatGPT(): void {
   const overlay = new OverlayManager()
+  const highlightManager = new HighlightManager({
+    showIndicatorBadge: true,
+    showUnderline: true,
+    autoVerify: false,
+  })
+
+  // Set up highlight event callbacks
+  highlightManager.setCallbacks({
+    onClaimClick: (claimId, claim) => {
+      // Show claim details in the overlay panel
+      const responseId = findResponseIdForClaim(claimId)
+      if (responseId) {
+        overlay.showClaimDetails(responseId, [claim])
+      }
+    },
+    onClaimHover: (_claimId, _claim, _isHovering) => {
+      // Could show a tooltip or preview here
+    },
+    onVerificationRequest: async (claimId, claim) => {
+      // Auto-verify when requested
+      await verifyClaimAndUpdateHighlight(claimId, claim, highlightManager)
+    },
+  })
+
+  // Helper to find response ID for a claim
+  function findResponseIdForClaim(claimId: string): string | undefined {
+    // Search through the response highlights to find which response contains this claim
+    const allResponses = document.querySelectorAll('[data-message-author-role="assistant"]')
+    for (const response of allResponses) {
+      const claimHighlight = response.querySelector(`[data-claim-id="${claimId}"]`)
+      if (claimHighlight) {
+        const turnElement = response.closest('[data-testid^="conversation-turn-"]')
+        if (turnElement) {
+          return turnElement.getAttribute('data-testid') || undefined
+        }
+      }
+    }
+    return undefined
+  }
+
+  // Helper to verify a claim and update the highlight
+  async function verifyClaimAndUpdateHighlight(
+    claimId: string,
+    claim: { text: string; type: string },
+    manager: HighlightManager
+  ): Promise<void> {
+    try {
+      const response = await new Promise<MessageResponse>((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            type: 'VERIFY_CLAIM',
+            payload: {
+              claimId,
+              claimText: claim.text,
+              claimType: claim.type,
+            },
+          },
+          resolve
+        )
+      })
+
+      if (response.status === 'ok' && response.data) {
+        const verifyResponse = response.data as VerifyClaimResponse
+        manager.updateClaimStatus(claimId, verifyResponse.verification)
+      }
+    } catch (error) {
+      if (config.isDev) {
+        console.error('[GroundCheck] Error verifying claim:', error)
+      }
+    }
+  }
 
   const observer = new ChatGPTObserver({
     onResponseStart: (element, responseId) => {
@@ -108,6 +185,9 @@ function initializeChatGPT(): void {
 
         // Update indicator to complete with claim count
         overlay.updateIndicator(responseId, 'complete', result.claims)
+
+        // Highlight claims inline in the response
+        highlightManager.highlightClaims(element, result.claims, text, responseId)
 
         if (config.isDev) {
           console.log(
@@ -143,6 +223,7 @@ function initializeChatGPT(): void {
   window.addEventListener('unload', () => {
     observer.stop()
     overlay.clear()
+    highlightManager.clearAll()
   })
 }
 

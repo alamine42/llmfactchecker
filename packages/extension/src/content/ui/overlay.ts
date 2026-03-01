@@ -1572,6 +1572,100 @@ export class OverlayManager {
           font-size: 14px;
         }
       }
+
+      /* ============================================
+         INLINE CLAIM HIGHLIGHTS
+      ============================================ */
+      .${CSS_PREFIX}-claim-highlight {
+        position: relative;
+        display: inline;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+        border-radius: 2px;
+        padding: 0 1px;
+        margin: 0 -1px;
+      }
+
+      /* Underline states using gradient backgrounds */
+      .${CSS_PREFIX}-claim-highlight--verified {
+        background: linear-gradient(to bottom, transparent 85%, var(--gc-success) 85%);
+      }
+
+      .${CSS_PREFIX}-claim-highlight--disputed {
+        background: linear-gradient(to bottom, transparent 85%, var(--gc-error) 85%);
+      }
+
+      .${CSS_PREFIX}-claim-highlight--unverified {
+        background: linear-gradient(to bottom, transparent 85%, var(--gc-text-tertiary) 85%);
+      }
+
+      .${CSS_PREFIX}-claim-highlight--pending {
+        background: linear-gradient(to bottom, transparent 85%, var(--gc-accent-primary) 85%);
+        animation: ${CSS_PREFIX}-highlight-pulse 1.5s ease-in-out infinite;
+      }
+
+      .${CSS_PREFIX}-claim-highlight--none {
+        background: linear-gradient(to bottom, transparent 85%, var(--gc-border-primary) 85%);
+      }
+
+      .${CSS_PREFIX}-claim-highlight--error {
+        background: linear-gradient(to bottom, transparent 85%, var(--gc-warning) 85%);
+      }
+
+      /* Hover state */
+      .${CSS_PREFIX}-claim-highlight:hover {
+        background-color: rgba(99, 91, 255, 0.08);
+      }
+
+      /* Verified hover */
+      .${CSS_PREFIX}-claim-highlight--verified:hover {
+        background: linear-gradient(to bottom, rgba(48, 209, 88, 0.08) 85%, var(--gc-success) 85%);
+      }
+
+      /* Disputed hover */
+      .${CSS_PREFIX}-claim-highlight--disputed:hover {
+        background: linear-gradient(to bottom, rgba(255, 69, 58, 0.08) 85%, var(--gc-error) 85%);
+      }
+
+      /* Focus state for keyboard navigation */
+      .${CSS_PREFIX}-claim-highlight:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--gc-accent-primary), 0 0 0 4px rgba(99, 91, 255, 0.25);
+      }
+
+      /* Focus visible for keyboard-only focus */
+      .${CSS_PREFIX}-claim-highlight:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--gc-accent-primary), 0 0 0 4px rgba(99, 91, 255, 0.25);
+      }
+
+      /* Animation for pending state */
+      @keyframes ${CSS_PREFIX}-highlight-pulse {
+        0%, 100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
+
+      /* Reduced motion for highlights */
+      @media (prefers-reduced-motion: reduce) {
+        .${CSS_PREFIX}-claim-highlight--pending {
+          animation: none;
+        }
+        .${CSS_PREFIX}-claim-highlight {
+          transition: none;
+        }
+      }
+
+      /* Touch device: larger tap targets for highlights */
+      @media (hover: none) and (pointer: coarse) {
+        .${CSS_PREFIX}-claim-highlight {
+          padding: 2px 4px;
+          margin: -2px -4px;
+        }
+      }
     `
     document.head.appendChild(style)
   }
