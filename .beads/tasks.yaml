@@ -1,0 +1,186 @@
+epics:
+  - id: sprint-0
+    title: "Sprint 0: Project Bootstrap"
+    priority: 1
+    status: completed
+    description: "Set up development environment, CI/CD, and project structure"
+    tasks:
+      - id: "0.1"
+        title: "Monorepo Setup"
+        status: completed
+        description: "pnpm workspaces, turbo.json, ESLint, Prettier, Python tooling, Husky, GitHub Actions CI, Sentry, env switching"
+      - id: "0.2"
+        title: "Extension Scaffold"
+        status: completed
+        description: "Vite + TypeScript + Preact, manifest.json, background worker, content script, popup, hot reload"
+      - id: "0.3"
+        title: "Backend Scaffold"
+        status: completed
+        description: "Vercel project, /api/health endpoint, Vitest, environment variables"
+      - id: "0.4"
+        title: "Python Service Scaffold"
+        status: completed
+        description: "FastAPI app, /health endpoint, pytest, Dockerfile, docker-compose"
+
+  - id: sprint-1
+    title: "Sprint 1: ChatGPT DOM Integration & Basic Pipeline"
+    priority: 2
+    status: completed
+    description: "Extension detects ChatGPT responses, sends to backend, receives mock verification"
+    tasks:
+      - id: "1.1"
+        title: "ChatGPT DOM Observer"
+        status: completed
+        description: "DOM selectors, MutationObserver, streaming detection, text extraction"
+      - id: "1.2"
+        title: "Extension ↔ Backend Communication"
+        status: completed
+        description: "TypeScript types, ApiClient, message passing, CORS, /api/verify stub"
+      - id: "1.3"
+        title: "Backend ↔ Python Service Communication"
+        status: completed
+        description: "API contract, Python /verify endpoint, HTTP client, error handling"
+      - id: "1.4"
+        title: "E2E Test Infrastructure"
+        status: open
+        description: "Playwright setup, test fixtures, MSW mocking, integration tests"
+      - id: "1.5"
+        title: "Extension Lifecycle"
+        status: completed
+        description: "onInstalled handler, first-install detection, version display"
+
+  - id: sprint-2
+    title: "Sprint 2: Claim Verification"
+    priority: 3
+    status: completed
+    description: "Verify claims using Google Fact Check Tools API (deviation from original plan)"
+    note: "Original plan called for OpenFactCheck + Perplexity. Implemented Google Fact Check API instead."
+    tasks:
+      - id: "2.1"
+        title: "Google Fact Check API Integration"
+        status: completed
+        description: "API client with retry logic, exponential backoff, error handling"
+      - id: "2.2"
+        title: "Verification Cache"
+        status: completed
+        description: "TTL cache (1 hour), claim fingerprinting, cache hit/miss"
+      - id: "2.3"
+        title: "Verification Service"
+        status: completed
+        description: "Orchestration, rating classification, confidence scoring"
+      - id: "2.4"
+        title: "Verification UI"
+        status: completed
+        description: "Status badges, verify button, sources section, rate limiting"
+
+  - id: sprint-3
+    title: "Sprint 3: Inline UI Indicators (MVP)"
+    priority: 4
+    status: open
+    description: "Display inline verification indicators next to claims in ChatGPT responses"
+    tasks:
+      - id: "3.1"
+        title: "Claim Highlighting System"
+        status: open
+        description: "Map claims to DOM positions, fuzzy matching, HighlightManager, CSS indicators"
+      - id: "3.2"
+        title: "Indicator Components"
+        status: open
+        description: "VerificationBadge component, three states, hover tooltip, loading state, accessibility"
+      - id: "3.3"
+        title: "DOM Injection"
+        status: open
+        description: "Shadow DOM container, Preact mount, positioning, DOM update handling, XSS prevention"
+      - id: "3.4"
+        title: "Integration"
+        status: open
+        description: "Wire up verification → highlight → render, error states, E2E tests"
+
+  - id: sprint-4
+    title: "Sprint 4: Sidebar & Source Display"
+    priority: 5
+    status: open
+    description: "Click indicator to open sidebar showing full verification details and sources"
+    tasks:
+      - id: "4.1"
+        title: "Sidebar Component"
+        status: open
+        description: "Slide-in panel, animations, close button, responsive, keyboard navigation"
+      - id: "4.2"
+        title: "Claim Detail View"
+        status: open
+        description: "ClaimCard, SourceCard components, confidence score, snippets with expand"
+      - id: "4.3"
+        title: "Sidebar State Management"
+        status: open
+        description: "State store, indicator click handling, active claim highlight, re-verify button"
+      - id: "4.4"
+        title: "Empty & Error States"
+        status: open
+        description: "No claims found state, verification failed state, retry button"
+
+  - id: sprint-5
+    title: "Sprint 5: Authentication & Usage Limits"
+    priority: 6
+    status: open
+    description: "User accounts, free tier (10 verifications/day), usage tracking"
+    tasks:
+      - id: "5.1"
+        title: "Supabase Setup"
+        status: open
+        description: "Auth providers, users/usage tables, RLS policies, client setup"
+      - id: "5.2"
+        title: "Authentication Flow"
+        status: open
+        description: "Signup/login endpoints, Google OAuth, JWT validation, token storage"
+      - id: "5.3"
+        title: "Extension Auth UI"
+        status: open
+        description: "Login form in popup, Google button, logged-in state, logout"
+      - id: "5.4"
+        title: "Usage Tracking & Limits"
+        status: open
+        description: "Count increment, /api/usage endpoint, daily limit, anonymous tracking"
+      - id: "5.5"
+        title: "Upgrade Prompts"
+        status: open
+        description: "Upgrade button, limit reached prompt, settings page stub"
+
+  - id: sprint-6
+    title: "Sprint 6: Payments, Caching & Polish"
+    priority: 7
+    status: open
+    description: "Stripe $5/mo, response caching, Claude.ai support, production readiness"
+    tasks:
+      - id: "6.1"
+        title: "Stripe Integration"
+        status: open
+        description: "Product setup, checkout endpoint, webhooks, billing page"
+      - id: "6.2"
+        title: "Response Caching"
+        status: open
+        description: "Redis/Vercel KV, cache key normalization, TTL, cache stats"
+      - id: "6.3"
+        title: "Claude.ai Support"
+        status: open
+        description: "DOM selectors, ClaudeAdapter, manifest update, styling fixes, E2E test"
+      - id: "6.4"
+        title: "Error Handling & Retry"
+        status: open
+        description: "Extension retry logic, circuit breaker, error messages, offline detection"
+      - id: "6.5"
+        title: "Analytics & Monitoring"
+        status: open
+        description: "Posthog setup, event tracking, error tracking, monitoring dashboard"
+      - id: "6.6"
+        title: "First-Use Experience"
+        status: open
+        description: "First-use tooltip, has-seen flag, settings deep link"
+      - id: "6.7"
+        title: "Settings Page"
+        status: open
+        description: "Verification mode toggle, chrome.storage.sync, cache refresh, account section"
+      - id: "6.8"
+        title: "Production Readiness"
+        status: open
+        description: "Prod env vars, Supabase RLS, Stripe prod, bundle optimization, security audit, release pipeline, Chrome Web Store submission"
