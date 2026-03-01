@@ -42,7 +42,7 @@ epics:
         description: "API contract, Python /verify endpoint, HTTP client, error handling"
       - id: "1.4"
         title: "E2E Test Infrastructure"
-        status: open
+        status: completed
         description: "Playwright setup, test fixtures, MSW mocking, integration tests"
       - id: "1.5"
         title: "Extension Lifecycle"
