@@ -76,24 +76,24 @@ epics:
   - id: sprint-3
     title: "Sprint 3: Inline UI Indicators (MVP)"
     priority: 4
-    status: open
+    status: completed
     description: "Display inline verification indicators next to claims in ChatGPT responses"
     tasks:
       - id: "3.1"
         title: "Claim Highlighting System"
-        status: open
+        status: completed
         description: "Map claims to DOM positions, fuzzy matching, HighlightManager, CSS indicators"
       - id: "3.2"
         title: "Indicator Components"
-        status: open
+        status: completed
         description: "VerificationBadge component, three states, hover tooltip, loading state, accessibility"
       - id: "3.3"
         title: "DOM Injection"
-        status: open
+        status: completed
         description: "Shadow DOM container, Preact mount, positioning, DOM update handling, XSS prevention"
       - id: "3.4"
         title: "Integration"
-        status: open
+        status: completed
         description: "Wire up verification → highlight → render, error states, E2E tests"
 
   - id: sprint-4
