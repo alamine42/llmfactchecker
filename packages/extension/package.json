@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@sentry/browser": "^7.100.0",
+    "@supabase/supabase-js": "^2.39.0",
     "preact": "^10.19.0"
   },
   "devDependencies": {

@@ -7,7 +7,9 @@ import type {
   VerifyClaimResponse,
   MessageType,
   MessageResponse,
+  UsageInfo,
 } from '@/shared/types'
+import { getAuthHeaders, updateUsageFromVerification } from '@/lib/auth'
 
 // Initialize Sentry for error tracking (disable console breadcrumbs to prevent leaking chat data)
 if (config.sentryDsn) {
@@ -144,12 +146,25 @@ interface VerifyClaimMessage {
   payload: VerifyClaimRequest
 }
 
+interface GetUsageMessage {
+  type: 'GET_USAGE'
+}
+
+interface GetAuthStateMessage {
+  type: 'GET_AUTH_STATE'
+}
+
 interface GenericMessage {
   type: Exclude<MessageType, 'EXTRACT_CLAIMS' | 'VERIFY_CLAIM'>
   payload?: unknown
 }
 
-type Message = ExtractClaimsMessage | VerifyClaimMessage | GenericMessage
+type Message =
+  | ExtractClaimsMessage
+  | VerifyClaimMessage
+  | GetUsageMessage
+  | GetAuthStateMessage
+  | GenericMessage
 
 function isExtractClaimsMessage(message: Message): message is ExtractClaimsMessage {
   return message.type === 'EXTRACT_CLAIMS'
@@ -159,11 +174,45 @@ function isVerifyClaimMessage(message: Message): message is VerifyClaimMessage {
   return message.type === 'VERIFY_CLAIM'
 }
 
+function isGetUsageMessage(message: Message): message is GetUsageMessage {
+  return message.type === 'GET_USAGE'
+}
+
+function isGetAuthStateMessage(message: Message): message is GetAuthStateMessage {
+  return message.type === 'GET_AUTH_STATE'
+}
+
+async function handleGetUsage(): Promise<UsageInfo> {
+  const authHeaders = await getAuthHeaders()
+
+  const response = await fetch(`${config.apiUrl}/api/usage`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to get usage: ${response.status}`)
+  }
+
+  const data = await response.json()
+  return {
+    current: data.current,
+    limit: data.limit,
+    remaining: data.remaining,
+  }
+}
+
 async function handleExtractClaims(payload: ExtractClaimsRequest): Promise<ExtractClaimsResponse> {
+  const authHeaders = await getAuthHeaders()
+
   const response = await fetch(`${config.apiUrl}/api/extract-claims`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
     },
     body: JSON.stringify(payload),
   })
@@ -176,18 +225,35 @@ async function handleExtractClaims(payload: ExtractClaimsRequest): Promise<Extra
   return response.json()
 }
 
-async function handleVerifyClaim(payload: VerifyClaimRequest): Promise<VerifyClaimResponse> {
+interface VerifyClaimResponseWithUsage extends VerifyClaimResponse {
+  usage?: UsageInfo
+}
+
+async function handleVerifyClaim(
+  payload: VerifyClaimRequest
+): Promise<VerifyClaimResponseWithUsage> {
+  const authHeaders = await getAuthHeaders()
+
   const response = await fetch(`${config.apiUrl}/api/verify-claim`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
     },
     body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`API error: ${response.status} - ${errorText}`)
+    const errorData = await response.json().catch(() => ({}))
+
+    // Handle rate limit specifically
+    if (response.status === 429) {
+      const error = new Error(errorData.message || 'Daily limit exceeded')
+      ;(error as Error & { usage?: UsageInfo }).usage = errorData.usage
+      throw error
+    }
+
+    throw new Error(`API error: ${response.status} - ${errorData.message || 'Unknown error'}`)
   }
 
   return response.json()
@@ -256,11 +322,24 @@ chrome.runtime.onMessage.addListener(
 
         try {
           const data = await handleVerifyClaim(message.payload)
+
+          // Update usage state if usage info is present in response
+          if (data.usage) {
+            updateUsageFromVerification(data.usage)
+          }
+
           sendResponse({ status: 'ok', data })
         } catch (err) {
           if (config.isDev) {
             console.error('[GroundCheck] Verify claim error:', err)
           }
+
+          // If rate limit error, update usage state from the error
+          const errorWithUsage = err as Error & { usage?: UsageInfo }
+          if (errorWithUsage.usage) {
+            updateUsageFromVerification(errorWithUsage.usage)
+          }
+
           Sentry.captureException(err)
           sendResponse({
             status: 'error',
@@ -270,6 +349,32 @@ chrome.runtime.onMessage.addListener(
       })()
 
       return true // Indicates async response
+    }
+
+    if (isGetUsageMessage(message)) {
+      ;(async () => {
+        try {
+          const usage = await handleGetUsage()
+          sendResponse({ status: 'ok', data: usage })
+        } catch (err) {
+          if (config.isDev) {
+            console.error('[GroundCheck] Get usage error:', err)
+          }
+          sendResponse({
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Unknown error',
+          })
+        }
+      })()
+
+      return true
+    }
+
+    if (isGetAuthStateMessage(message)) {
+      // Auth state is managed by the popup directly via lib/auth
+      // This message type exists for potential future use by content scripts
+      sendResponse({ status: 'ok', data: { supported: true } })
+      return true
     }
 
     sendResponse({ status: 'ok' })

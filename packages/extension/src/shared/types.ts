@@ -71,3 +71,28 @@ export interface VerifyClaimResponse {
   claimId: string
   verification: VerificationResult
 }
+
+// Usage tracking types
+export interface UsageInfo {
+  current: number
+  limit: number
+  remaining: number
+}
+
+export interface AuthUser {
+  id: string
+  email?: string
+  tier: 'free' | 'pro'
+}
+
+export interface AuthState {
+  isAuthenticated: boolean
+  user: AuthUser | null
+  loading: boolean
+  error: string | null
+}
+
+export interface UsageState extends UsageInfo {
+  loading: boolean
+  error: string | null
+}

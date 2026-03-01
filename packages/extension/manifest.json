@@ -3,7 +3,7 @@
   "name": "GroundCheck",
   "version": "0.1.0",
   "description": "Fact-check AI responses with real-time source verification",
-  "permissions": ["storage", "activeTab", "tabs"],
+  "permissions": ["storage", "activeTab", "tabs", "identity"],
   "host_permissions": [
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",
@@ -11,8 +11,14 @@
     "http://localhost:3000/*",
     "http://localhost:8000/*",
     "https://*.vercel.app/*",
-    "https://*.groundcheck.app/*"
+    "https://*.groundcheck.app/*",
+    "https://*.supabase.co/*"
   ],
+  "oauth2": {
+    "client_id": "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
+  },
+  "key": "YOUR_EXTENSION_KEY_FOR_STABLE_ID",
   "background": {
     "service_worker": "src/background/index.ts",
     "type": "module"

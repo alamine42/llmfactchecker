@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { initSentry, Sentry } from '../lib/sentry'
 import { config } from '../lib/config'
 import { VerifyClaimRequestSchema, VerifyClaimResponseSchema } from '../lib/schemas'
+import { extractAuthContext, getDailyLimit, hasUnlimitedUsage } from '../lib/auth'
+import { checkAndIncrementUsage, incrementUsageOnly } from '../lib/supabase'
 
 // Initialize Sentry on cold start
 initSentry()
@@ -13,7 +15,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Validate request body with Zod
+    // Validate request body FIRST (before any usage tracking)
+    // This prevents quota drain from invalid/malformed requests
     const parseResult = VerifyClaimRequestSchema.safeParse(req.body)
 
     if (!parseResult.success) {
@@ -24,6 +27,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const validatedRequest = parseResult.data
+
+    // Extract auth context from headers
+    const authContext = await extractAuthContext(req)
+
+    // Must have either user ID or device fingerprint for usage tracking
+    if (!authContext.userId && !authContext.deviceFingerprint) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'Please provide a valid token or device fingerprint',
+      })
+    }
+
+    // Check and increment usage (atomic operation)
+    // Pro tier has unlimited usage - skip limit check but still track usage
+    let usageResult: { allowed: boolean; current: number; limit: number; remaining: number }
+
+    if (hasUnlimitedUsage(authContext.tier)) {
+      // Pro tier: just increment, no limit check
+      const current = await incrementUsageOnly(authContext.userId, authContext.deviceFingerprint)
+      usageResult = {
+        allowed: true,
+        current,
+        limit: -1, // unlimited
+        remaining: -1, // unlimited
+      }
+    } else {
+      // Free tier: check and increment with limit
+      const dailyLimit = getDailyLimit(authContext.tier)
+      usageResult = await checkAndIncrementUsage(
+        authContext.userId,
+        authContext.deviceFingerprint,
+        dailyLimit
+      )
+
+      // Check if usage limit exceeded
+      if (!usageResult.allowed) {
+        return res.status(429).json({
+          error: 'Daily limit exceeded',
+          message: `You've used all ${usageResult.limit} verifications for today. Upgrade to Pro for unlimited verifications.`,
+          usage: {
+            current: usageResult.current,
+            limit: usageResult.limit,
+            remaining: 0,
+          },
+        })
+      }
+    }
 
     // Forward request to Python service with timeout
     const controller = new AbortController()
@@ -70,7 +120,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    return res.status(200).json(responseParseResult.data)
+    // Include usage info in successful response
+    return res.status(200).json({
+      ...responseParseResult.data,
+      usage: {
+        current: usageResult.current,
+        limit: usageResult.limit,
+        remaining: usageResult.remaining,
+      },
+    })
   } catch (error) {
     // Handle timeout/abort errors separately
     if (error instanceof Error && error.name === 'AbortError') {
