@@ -38,4 +38,36 @@ export interface ExtractClaimsResponse {
   processingTime?: number
 }
 
-export type MessageType = 'EXTRACT_CLAIMS' | 'CLAIMS_RESULT' | 'ERROR'
+export type MessageType = 'EXTRACT_CLAIMS' | 'CLAIMS_RESULT' | 'VERIFY_CLAIM' | 'ERROR'
+
+// Verification types
+export type VerificationStatus = 'pending' | 'verified' | 'disputed' | 'unverified' | 'error'
+
+export interface VerificationSource {
+  name: string // "PolitiFact", "Snopes"
+  url: string // Link to fact-check article
+  verdict: string // "True", "False", "Misleading"
+  publishedDate?: string | null
+}
+
+export interface VerificationResult {
+  status: VerificationStatus
+  sources: VerificationSource[]
+  confidence: number // 0-1 aggregated
+  verifiedAt: string
+}
+
+export interface VerifiedClaim extends Claim {
+  verification?: VerificationResult
+}
+
+export interface VerifyClaimRequest {
+  claimId: string
+  claimText: string
+  claimType: ClaimType
+}
+
+export interface VerifyClaimResponse {
+  claimId: string
+  verification: VerificationResult
+}

@@ -5,14 +5,21 @@
  * and optimized experiences for both desktop and mobile.
  */
 
-import type { Claim } from '@/shared/types'
+import type {
+  Claim,
+  ClaimType,
+  VerifiedClaim,
+  VerificationResult,
+  VerifyClaimResponse,
+  MessageResponse,
+} from '@/shared/types'
 
 export type IndicatorStatus = 'checking' | 'complete' | 'error'
 
 interface IndicatorState {
   element: HTMLElement
   status: IndicatorStatus
-  claims: Claim[]
+  claims: VerifiedClaim[]
   panelVisible: boolean
   responseElement: HTMLElement
 }
@@ -100,7 +107,7 @@ export class OverlayManager {
     }
   }
 
-  showClaimDetails(id: string, claims: Claim[]): void {
+  showClaimDetails(id: string, claims: VerifiedClaim[]): void {
     const state = this.indicators.get(id)
     if (!state) return
 
@@ -285,7 +292,7 @@ export class OverlayManager {
     wrapper.appendChild(indicator)
   }
 
-  private createClaimPanel(id: string, claims: Claim[]): HTMLElement {
+  private createClaimPanel(id: string, claims: VerifiedClaim[]): HTMLElement {
     const panel = document.createElement('div')
     panel.className = `${CSS_PREFIX}-panel`
     panel.setAttribute('data-id', id)
@@ -323,7 +330,7 @@ export class OverlayManager {
     list.className = `${CSS_PREFIX}-claim-list`
 
     claims.forEach((claim, index) => {
-      const item = this.createClaimItem(claim, index)
+      const item = this.createClaimItem(id, claim, index)
       list.appendChild(item)
     })
 
@@ -346,9 +353,10 @@ export class OverlayManager {
     return panel
   }
 
-  private createClaimItem(claim: Claim, index: number): HTMLElement {
+  private createClaimItem(responseId: string, claim: VerifiedClaim, index: number): HTMLElement {
     const item = document.createElement('li')
     item.className = `${CSS_PREFIX}-claim-item`
+    item.setAttribute('data-claim-id', claim.id)
     item.style.setProperty('--animation-delay', `${index * 50}ms`)
 
     const typeConfig = this.getClaimTypeConfig(claim.type)
@@ -368,9 +376,266 @@ export class OverlayManager {
         </span>
       </div>
       <p class="${CSS_PREFIX}-claim-text">${this.escapeHtml(claim.text)}</p>
+      <div class="${CSS_PREFIX}-claim-actions">
+        ${this.createVerificationBadge(claim.verification)}
+        ${this.createVerifyButton(responseId, claim)}
+      </div>
+      ${this.createSourcesSection(claim.verification)}
     `
 
+    // Add verify button click handler
+    const verifyBtn = item.querySelector(`.${CSS_PREFIX}-verify-btn`)
+    if (verifyBtn) {
+      verifyBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this.verifyClaimById(responseId, claim.id, claim.text, claim.type)
+      })
+    }
+
+    // Add sources toggle handler
+    const sourcesToggle = item.querySelector(`.${CSS_PREFIX}-sources-toggle`)
+    if (sourcesToggle) {
+      sourcesToggle.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const sourcesList = item.querySelector(`.${CSS_PREFIX}-sources-list`)
+        if (sourcesList) {
+          sourcesList.classList.toggle(`${CSS_PREFIX}-sources-list--visible`)
+          sourcesToggle.classList.toggle(`${CSS_PREFIX}-sources-toggle--expanded`)
+        }
+      })
+    }
+
     return item
+  }
+
+  private createVerificationBadge(verification?: VerificationResult): string {
+    if (!verification) {
+      return ''
+    }
+
+    const statusConfig = this.getVerificationStatusConfig(verification.status)
+
+    return `
+      <span class="${CSS_PREFIX}-verification-badge ${CSS_PREFIX}-verification-badge--${verification.status}" title="${statusConfig.description}">
+        <span class="${CSS_PREFIX}-verification-badge-icon">${statusConfig.icon}</span>
+        <span class="${CSS_PREFIX}-verification-badge-label">${statusConfig.label}</span>
+      </span>
+    `
+  }
+
+  private createVerifyButton(responseId: string, claim: VerifiedClaim): string {
+    // Don't show verify button if already verified or in pending state
+    if (claim.verification && claim.verification.status !== 'error') {
+      return ''
+    }
+
+    return `
+      <button class="${CSS_PREFIX}-verify-btn" data-response-id="${responseId}" data-claim-id="${claim.id}">
+        <svg viewBox="0 0 16 16" fill="currentColor" class="${CSS_PREFIX}-verify-btn-icon">
+          <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.78 5.28-4.5 4.5a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06L6.75 9.19l3.97-3.97a.75.75 0 1 1 1.06 1.06Z"/>
+        </svg>
+        Verify
+      </button>
+    `
+  }
+
+  private createSourcesSection(verification?: VerificationResult): string {
+    if (!verification || verification.sources.length === 0) {
+      return ''
+    }
+
+    const sourcesHtml = verification.sources
+      .map(
+        (source) => `
+        <li class="${CSS_PREFIX}-source-item">
+          <a href="${this.escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" class="${CSS_PREFIX}-source-link">
+            <span class="${CSS_PREFIX}-source-name">${this.escapeHtml(source.name)}</span>
+          </a>
+          <span class="${CSS_PREFIX}-source-verdict ${CSS_PREFIX}-source-verdict--${this.getVerdictClass(source.verdict)}">${this.escapeHtml(source.verdict)}</span>
+        </li>
+      `
+      )
+      .join('')
+
+    return `
+      <div class="${CSS_PREFIX}-sources-section">
+        <button class="${CSS_PREFIX}-sources-toggle">
+          <svg viewBox="0 0 16 16" fill="currentColor" class="${CSS_PREFIX}-sources-toggle-icon">
+            <path d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"/>
+          </svg>
+          ${verification.sources.length} source${verification.sources.length !== 1 ? 's' : ''}
+        </button>
+        <ul class="${CSS_PREFIX}-sources-list">
+          ${sourcesHtml}
+        </ul>
+      </div>
+    `
+  }
+
+  private getVerdictClass(verdict: string): string {
+    const lower = verdict.toLowerCase()
+    if (lower.includes('true') || lower.includes('correct') || lower.includes('accurate')) {
+      return 'true'
+    }
+    if (lower.includes('false') || lower.includes('incorrect') || lower.includes('misleading')) {
+      return 'false'
+    }
+    return 'mixed'
+  }
+
+  private getVerificationStatusConfig(status: string): {
+    label: string
+    icon: string
+    description: string
+  } {
+    const configs: Record<string, { label: string; icon: string; description: string }> = {
+      pending: {
+        label: 'Checking',
+        icon: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="20" stroke-dashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 8 8" to="360 8 8" dur="1s" repeatCount="indefinite"/></circle></svg>',
+        description: 'Verification in progress...',
+      },
+      verified: {
+        label: 'Verified',
+        icon: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.78 5.28-4.5 4.5a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06L6.75 9.19l3.97-3.97a.75.75 0 1 1 1.06 1.06Z"/></svg>',
+        description: 'This claim has been verified by fact-checkers',
+      },
+      disputed: {
+        label: 'Disputed',
+        icon: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1ZM6.28 5.22a.75.75 0 0 0-1.06 1.06L6.94 8 5.22 9.72a.75.75 0 1 0 1.06 1.06L8 9.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L9.06 8l1.72-1.72a.75.75 0 0 0-1.06-1.06L8 6.94 6.28 5.22Z"/></svg>',
+        description: 'This claim has been disputed by fact-checkers',
+      },
+      unverified: {
+        label: 'Unverified',
+        icon: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm-.75 3.5a.75.75 0 0 1 1.5 0v4a.75.75 0 0 1-1.5 0v-4Zm.75 7.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>',
+        description: 'No fact-check results found for this claim',
+      },
+      error: {
+        label: 'Error',
+        icon: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm-.75 3.5a.75.75 0 0 1 1.5 0v4a.75.75 0 0 1-1.5 0v-4Zm.75 7.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>',
+        description: 'Failed to verify this claim',
+      },
+    }
+    return configs[status] || configs.unverified
+  }
+
+  async verifyClaimById(
+    responseId: string,
+    claimId: string,
+    claimText: string,
+    claimType: ClaimType
+  ): Promise<void> {
+    const state = this.indicators.get(responseId)
+    if (!state) return
+
+    // Find the claim item element
+    const claimItem = document.querySelector(
+      `.${CSS_PREFIX}-claim-item[data-claim-id="${claimId}"]`
+    )
+    if (!claimItem) return
+
+    // Update claim in state to show pending
+    const claimIndex = state.claims.findIndex((c) => c.id === claimId)
+    if (claimIndex === -1) return
+
+    // Show loading state
+    state.claims[claimIndex].verification = {
+      status: 'pending',
+      sources: [],
+      confidence: 0,
+      verifiedAt: new Date().toISOString(),
+    }
+    this.updateClaimItemUI(claimItem as HTMLElement, state.claims[claimIndex])
+
+    try {
+      // Send verification request
+      const response = await new Promise<MessageResponse>((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            type: 'VERIFY_CLAIM',
+            payload: {
+              claimId,
+              claimText,
+              claimType,
+            },
+          },
+          resolve
+        )
+      })
+
+      if (response.status === 'ok' && response.data) {
+        const verifyResponse = response.data as VerifyClaimResponse
+        state.claims[claimIndex].verification = verifyResponse.verification
+      } else {
+        state.claims[claimIndex].verification = {
+          status: 'error',
+          sources: [],
+          confidence: 0,
+          verifiedAt: new Date().toISOString(),
+        }
+      }
+    } catch {
+      state.claims[claimIndex].verification = {
+        status: 'error',
+        sources: [],
+        confidence: 0,
+        verifiedAt: new Date().toISOString(),
+      }
+    }
+
+    // Update UI
+    this.updateClaimItemUI(claimItem as HTMLElement, state.claims[claimIndex])
+  }
+
+  private updateClaimItemUI(item: HTMLElement, claim: VerifiedClaim): void {
+    // Get responseId from the panel's data attribute
+    const panel = item.closest(`.${CSS_PREFIX}-panel`)
+    const responseId = panel?.getAttribute('data-id') || ''
+
+    // Update actions section
+    const actionsContainer = item.querySelector(`.${CSS_PREFIX}-claim-actions`)
+    if (actionsContainer) {
+      actionsContainer.innerHTML = `
+        ${this.createVerificationBadge(claim.verification)}
+        ${this.createVerifyButton(responseId, claim)}
+      `
+
+      // Re-attach verify button click handler
+      const verifyBtn = actionsContainer.querySelector(`.${CSS_PREFIX}-verify-btn`)
+      if (verifyBtn) {
+        verifyBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          this.verifyClaimById(responseId, claim.id, claim.text, claim.type)
+        })
+      }
+    }
+
+    // Update or add sources section
+    let sourcesSection = item.querySelector(`.${CSS_PREFIX}-sources-section`)
+    const newSourcesHtml = this.createSourcesSection(claim.verification)
+
+    if (newSourcesHtml) {
+      if (sourcesSection) {
+        sourcesSection.outerHTML = newSourcesHtml
+      } else {
+        item.insertAdjacentHTML('beforeend', newSourcesHtml)
+      }
+
+      // Re-attach toggle handler
+      sourcesSection = item.querySelector(`.${CSS_PREFIX}-sources-section`)
+      const sourcesToggle = sourcesSection?.querySelector(`.${CSS_PREFIX}-sources-toggle`)
+      if (sourcesToggle) {
+        sourcesToggle.addEventListener('click', (e) => {
+          e.stopPropagation()
+          const sourcesList = item.querySelector(`.${CSS_PREFIX}-sources-list`)
+          if (sourcesList) {
+            sourcesList.classList.toggle(`${CSS_PREFIX}-sources-list--visible`)
+            sourcesToggle.classList.toggle(`${CSS_PREFIX}-sources-toggle--expanded`)
+          }
+        })
+      }
+    } else if (sourcesSection) {
+      sourcesSection.remove()
+    }
   }
 
   private getClaimTypeConfig(type: string): { label: string; icon: string; description: string } {
@@ -996,6 +1261,227 @@ export class OverlayManager {
         line-height: 1.55;
         color: var(--gc-text-primary);
         word-break: break-word;
+      }
+
+      /* ============================================
+         CLAIM ACTIONS
+      ============================================ */
+      .${CSS_PREFIX}-claim-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--gc-space-2);
+        margin-top: var(--gc-space-2);
+        flex-wrap: wrap;
+      }
+
+      /* ============================================
+         VERIFICATION BADGES
+      ============================================ */
+      .${CSS_PREFIX}-verification-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--gc-space-1);
+        padding: 3px 8px 3px 6px;
+        border-radius: var(--gc-radius-full);
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      .${CSS_PREFIX}-verification-badge-icon {
+        display: flex;
+        width: 12px;
+        height: 12px;
+      }
+
+      .${CSS_PREFIX}-verification-badge-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .${CSS_PREFIX}-verification-badge--verified {
+        background: var(--gc-success-bg);
+        color: var(--gc-success);
+        border: 1px solid var(--gc-success-border);
+      }
+
+      .${CSS_PREFIX}-verification-badge--disputed {
+        background: var(--gc-error-bg);
+        color: var(--gc-error);
+        border: 1px solid rgba(255, 69, 58, 0.24);
+      }
+
+      .${CSS_PREFIX}-verification-badge--unverified {
+        background: var(--gc-bg-tertiary);
+        color: var(--gc-text-tertiary);
+        border: 1px solid var(--gc-border-primary);
+      }
+
+      .${CSS_PREFIX}-verification-badge--pending {
+        background: var(--gc-bg-secondary);
+        color: var(--gc-text-tertiary);
+        border: 1px solid var(--gc-border-primary);
+      }
+
+      .${CSS_PREFIX}-verification-badge--pending .${CSS_PREFIX}-verification-badge-icon svg {
+        animation: ${CSS_PREFIX}-spin 1s linear infinite;
+      }
+
+      .${CSS_PREFIX}-verification-badge--error {
+        background: var(--gc-warning-bg);
+        color: var(--gc-warning);
+        border: 1px solid rgba(255, 159, 10, 0.24);
+      }
+
+      /* ============================================
+         VERIFY BUTTON
+      ============================================ */
+      .${CSS_PREFIX}-verify-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--gc-space-1);
+        padding: 4px 10px;
+        border: 1px solid var(--gc-border-primary);
+        border-radius: var(--gc-radius-full);
+        background: var(--gc-bg-primary);
+        color: var(--gc-accent-primary);
+        font-family: var(--gc-font-family);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--gc-transition-fast);
+      }
+
+      .${CSS_PREFIX}-verify-btn:hover {
+        background: var(--gc-accent-primary);
+        color: white;
+        border-color: var(--gc-accent-primary);
+      }
+
+      .${CSS_PREFIX}-verify-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--gc-accent-primary), 0 0 0 4px rgba(99, 91, 255, 0.25);
+      }
+
+      .${CSS_PREFIX}-verify-btn:active {
+        transform: scale(0.98);
+      }
+
+      .${CSS_PREFIX}-verify-btn-icon {
+        width: 12px;
+        height: 12px;
+      }
+
+      /* ============================================
+         SOURCE CITATIONS
+      ============================================ */
+      .${CSS_PREFIX}-sources-section {
+        margin-top: var(--gc-space-2);
+      }
+
+      .${CSS_PREFIX}-sources-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--gc-space-1);
+        padding: 4px 8px;
+        border: none;
+        border-radius: var(--gc-radius-sm);
+        background: transparent;
+        color: var(--gc-text-secondary);
+        font-family: var(--gc-font-family);
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--gc-transition-fast);
+      }
+
+      .${CSS_PREFIX}-sources-toggle:hover {
+        background: var(--gc-bg-hover);
+        color: var(--gc-text-primary);
+      }
+
+      .${CSS_PREFIX}-sources-toggle-icon {
+        width: 14px;
+        height: 14px;
+        transition: transform var(--gc-transition-fast);
+      }
+
+      .${CSS_PREFIX}-sources-toggle--expanded .${CSS_PREFIX}-sources-toggle-icon {
+        transform: rotate(180deg);
+      }
+
+      .${CSS_PREFIX}-sources-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height var(--gc-transition-normal);
+      }
+
+      .${CSS_PREFIX}-sources-list--visible {
+        max-height: 200px;
+        overflow-y: auto;
+        margin-top: var(--gc-space-2);
+      }
+
+      .${CSS_PREFIX}-source-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--gc-space-2) var(--gc-space-3);
+        background: var(--gc-bg-secondary);
+        border-radius: var(--gc-radius-sm);
+        margin-bottom: var(--gc-space-1);
+      }
+
+      .${CSS_PREFIX}-source-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .${CSS_PREFIX}-source-link {
+        color: var(--gc-accent-primary);
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 500;
+        transition: opacity var(--gc-transition-fast);
+      }
+
+      .${CSS_PREFIX}-source-link:hover {
+        opacity: 0.8;
+        text-decoration: underline;
+      }
+
+      .${CSS_PREFIX}-source-name {
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .${CSS_PREFIX}-source-verdict {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: var(--gc-radius-sm);
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+      }
+
+      .${CSS_PREFIX}-source-verdict--true {
+        background: var(--gc-success-bg);
+        color: var(--gc-success);
+      }
+
+      .${CSS_PREFIX}-source-verdict--false {
+        background: var(--gc-error-bg);
+        color: var(--gc-error);
+      }
+
+      .${CSS_PREFIX}-source-verdict--mixed {
+        background: var(--gc-warning-bg);
+        color: var(--gc-warning);
       }
 
       /* ============================================
