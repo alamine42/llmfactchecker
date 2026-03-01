@@ -39,3 +39,6 @@ coverage/
 .venv/
 venv/
 *.egg-info/
+
+# Handover documentation
+HANDOVER.md
