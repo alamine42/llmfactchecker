@@ -15,10 +15,9 @@
     "https://*.supabase.co/*"
   ],
   "oauth2": {
-    "client_id": "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "599060310781-sbjm9i085os24ush0b51fvsp9q760rgr.apps.googleusercontent.com",
     "scopes": ["openid", "email", "profile"]
   },
-  "key": "YOUR_EXTENSION_KEY_FOR_STABLE_ID",
   "background": {
     "service_worker": "src/background/index.ts",
     "type": "module"
