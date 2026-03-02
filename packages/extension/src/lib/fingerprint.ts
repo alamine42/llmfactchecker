@@ -23,12 +23,27 @@ async function hashString(str: string): Promise<string> {
  * Generate a device fingerprint from browser characteristics
  */
 async function generateFingerprint(): Promise<string> {
+  // Use optional chaining for screen/window properties as they may not be available in all contexts
+  // In service workers, neither screen nor window is available
+  let screenWidth = ''
+  let screenHeight = ''
+  let colorDepth = ''
+
+  if (typeof screen !== 'undefined') {
+    screenWidth = screen.width?.toString() || ''
+    screenHeight = screen.height?.toString() || ''
+    colorDepth = screen.colorDepth?.toString() || ''
+  } else if (typeof window !== 'undefined') {
+    screenWidth = window.innerWidth?.toString() || ''
+    screenHeight = window.innerHeight?.toString() || ''
+  }
+
   const components = [
     navigator.userAgent,
     navigator.language,
-    screen.width.toString(),
-    screen.height.toString(),
-    screen.colorDepth.toString(),
+    screenWidth,
+    screenHeight,
+    colorDepth,
     Intl.DateTimeFormat().resolvedOptions().timeZone,
     navigator.hardwareConcurrency?.toString() || '',
     navigator.platform || '',

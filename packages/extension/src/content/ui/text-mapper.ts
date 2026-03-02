@@ -22,6 +22,39 @@ export class TextPositionMapper {
   }
 
   /**
+   * Aggressively normalize text for fuzzy matching
+   * - Collapses all whitespace
+   * - Adds space after punctuation if missing (handles "title:text" -> "title: text")
+   * - Adds space between lowercase and uppercase (handles "millionWhy" -> "million Why")
+   * - Removes extra spaces
+   */
+  normalizeForFuzzyMatch(text: string): string {
+    return (
+      text
+        // Add space after punctuation if followed by letter/number (not already spaced)
+        .replace(/([.:;,!?])([A-Za-z0-9])/g, '$1 $2')
+        // Add space between lowercase letter/number and uppercase letter (camelCase boundaries)
+        // Handles "millionWhy" -> "million Why" from concatenated DOM elements
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        // Collapse all whitespace to single space
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+  }
+
+  /**
+   * Strip source prefixes from claim text (e.g., "Wikipedia ", "Wikipedia+1 ")
+   * These are added by the factcheck service but don't exist in the original text
+   */
+  stripSourcePrefix(text: string): string {
+    // Pattern matches: "SourceName " or "SourceName+N " at the start
+    // Source names are single words (no spaces, no colons) like "Wikipedia", "BBC"
+    // Examples: "Wikipedia ", "Wikipedia+1 ", "BBC+2 "
+    // Should NOT match: "Estimated size: " (has colon, multiple words)
+    return text.replace(/^[A-Za-z][A-Za-z0-9]*(?:\+\d+)?\s+/, '')
+  }
+
+  /**
    * Find all text nodes in a container, excluding code blocks
    */
   getTextNodes(container: HTMLElement): Text[] {
@@ -113,8 +146,12 @@ export class TextPositionMapper {
    * This is the fallback when sourceOffset doesn't align
    */
   fuzzyFindClaim(container: HTMLElement, claimText: string): ClaimRange | null {
-    const normalizedClaim = this.normalizeText(claimText)
-    if (!normalizedClaim) return null
+    // First try with original text, then with stripped source prefix
+    const originalNormalized = this.normalizeText(claimText)
+    const strippedClaim = this.stripSourcePrefix(claimText)
+    const strippedNormalized = this.normalizeText(strippedClaim)
+
+    if (!originalNormalized && !strippedNormalized) return null
 
     const textNodes = this.getTextNodes(container)
     if (textNodes.length === 0) {
@@ -125,32 +162,73 @@ export class TextPositionMapper {
     // Build concatenated text from all nodes
     const fullText = this.getConcatenatedText(textNodes)
     const normalizedFull = this.normalizeText(fullText)
+    // Also create fuzzy-normalized version for more aggressive matching
+    const fuzzyFull = this.normalizeForFuzzyMatch(fullText)
 
     console.log('[GroundCheck TextMapper] Searching for claim in', normalizedFull.length, 'chars')
-    console.log('[GroundCheck TextMapper] Claim to find:', normalizedClaim.slice(0, 80), '...')
+    console.log('[GroundCheck TextMapper] Claim to find:', originalNormalized.slice(0, 80), '...')
 
-    // Find the claim in the normalized full text
-    let claimIndex = normalizedFull.indexOf(normalizedClaim)
+    // Try original claim first
+    let claimIndex = normalizedFull.indexOf(originalNormalized)
+    let searchClaim = originalNormalized
+    let useFuzzyText = false
 
     if (claimIndex === -1) {
       // Try case-insensitive search
-      claimIndex = normalizedFull.toLowerCase().indexOf(normalizedClaim.toLowerCase())
+      claimIndex = normalizedFull.toLowerCase().indexOf(originalNormalized.toLowerCase())
+    }
+
+    // If not found, try with stripped source prefix
+    if (claimIndex === -1 && strippedNormalized !== originalNormalized) {
+      console.log(
+        '[GroundCheck TextMapper] Trying with stripped source prefix:',
+        strippedNormalized.slice(0, 80),
+        '...'
+      )
+      claimIndex = normalizedFull.indexOf(strippedNormalized)
+      if (claimIndex === -1) {
+        claimIndex = normalizedFull.toLowerCase().indexOf(strippedNormalized.toLowerCase())
+      }
+      if (claimIndex !== -1) {
+        searchClaim = strippedNormalized
+        console.log(
+          '[GroundCheck TextMapper] Found match after stripping source prefix at',
+          claimIndex
+        )
+      }
+    }
+
+    // If still not found, try fuzzy matching (handles "title:text" vs "title: text")
+    if (claimIndex === -1) {
+      const fuzzyStripped = this.normalizeForFuzzyMatch(strippedClaim)
+      claimIndex = fuzzyFull.indexOf(fuzzyStripped)
+      if (claimIndex === -1) {
+        claimIndex = fuzzyFull.toLowerCase().indexOf(fuzzyStripped.toLowerCase())
+      }
+      if (claimIndex !== -1) {
+        searchClaim = fuzzyStripped
+        useFuzzyText = true
+        console.log('[GroundCheck TextMapper] Found match using fuzzy normalization at', claimIndex)
+      }
     }
 
     if (claimIndex === -1) {
-      // Try finding a significant substring (first 50 chars)
-      const shortClaim = normalizedClaim.slice(0, 50)
-      claimIndex = normalizedFull.toLowerCase().indexOf(shortClaim.toLowerCase())
+      // Try finding a significant substring (first 50 chars) from stripped version
+      const shortClaim = this.normalizeForFuzzyMatch(strippedClaim).slice(0, 50)
+      claimIndex = fuzzyFull.toLowerCase().indexOf(shortClaim.toLowerCase())
       if (claimIndex !== -1) {
         console.log('[GroundCheck TextMapper] Found partial match at', claimIndex)
+        searchClaim = this.normalizeForFuzzyMatch(strippedClaim)
+        useFuzzyText = true
         // Try to find the full sentence from this position
-        const endIndex = Math.min(claimIndex + normalizedClaim.length, normalizedFull.length)
+        const endIndex = Math.min(claimIndex + searchClaim.length, fuzzyFull.length)
         return this.findRangeForNormalizedPositions(
           container,
           textNodes,
           claimIndex,
           endIndex,
-          claimText
+          strippedClaim,
+          useFuzzyText
         )
       }
     }
@@ -167,8 +245,9 @@ export class TextPositionMapper {
       container,
       textNodes,
       claimIndex,
-      claimIndex + normalizedClaim.length,
-      claimText
+      claimIndex + searchClaim.length,
+      strippedClaim,
+      useFuzzyText
     )
   }
 
@@ -181,20 +260,24 @@ export class TextPositionMapper {
     sourceOffset: { start: number; end: number },
     originalText: string
   ): ClaimRange | null {
+    // Strip source prefix from claim text if present
+    const strippedClaim = this.stripSourcePrefix(claimText)
+
     // First, verify the offset matches the claim text
     const normalizedOriginal = this.normalizeText(originalText)
     const expectedText = normalizedOriginal.slice(sourceOffset.start, sourceOffset.end)
     const normalizedClaim = this.normalizeText(claimText)
+    const normalizedStripped = this.normalizeText(strippedClaim)
 
-    // If offsets align, use them directly
-    if (expectedText === normalizedClaim) {
+    // If offsets align with original or stripped claim, use them directly
+    if (expectedText === normalizedClaim || expectedText === normalizedStripped) {
       const textNodes = this.getTextNodes(container)
       return this.findRangeForNormalizedPositions(
         container,
         textNodes,
         sourceOffset.start,
         sourceOffset.end,
-        claimText
+        strippedClaim
       )
     }
 
@@ -210,7 +293,8 @@ export class TextPositionMapper {
     textNodes: Text[],
     startNormalized: number,
     endNormalized: number,
-    originalClaimText: string
+    originalClaimText: string,
+    useFuzzyText = false
   ): ClaimRange | null {
     // Map normalized positions to DOM positions
     interface NodeMapping {
@@ -223,7 +307,9 @@ export class TextPositionMapper {
     const nodeMappings: NodeMapping[] = []
     let normalizedPos = 0
     let lastWhitespace = true
+    let lastPunctuation = false
 
+    let lastChar = ''
     for (const node of textNodes) {
       const nodeText = node.textContent || ''
       const nodeStart = normalizedPos
@@ -231,16 +317,33 @@ export class TextPositionMapper {
       for (let i = 0; i < nodeText.length; i++) {
         const char = nodeText[i]
         const isWhitespace = /\s/.test(char)
+        const isPunctuation = /[.:;,!?]/.test(char)
+        const isUppercase = /[A-Z]/.test(char)
+        const lastWasLowercaseOrDigit = /[a-z0-9]/.test(lastChar)
 
         if (isWhitespace) {
           if (!lastWhitespace) {
             normalizedPos++
           }
           lastWhitespace = true
+          lastPunctuation = false
         } else {
+          // In fuzzy mode, count extra positions for inserted spaces
+          if (useFuzzyText) {
+            // Space after punctuation if followed by non-space
+            if (lastPunctuation && !lastWhitespace) {
+              normalizedPos++
+            }
+            // Space between lowercase/digit and uppercase (camelCase boundary)
+            if (lastWasLowercaseOrDigit && isUppercase && !lastWhitespace) {
+              normalizedPos++
+            }
+          }
           normalizedPos++
           lastWhitespace = false
+          lastPunctuation = isPunctuation
         }
+        lastChar = char
       }
 
       nodeMappings.push({

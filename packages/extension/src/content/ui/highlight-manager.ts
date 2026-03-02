@@ -210,8 +210,23 @@ export class HighlightManager {
       const entranceDelay = Math.min(responseClaimIndex * 80, 400)
       wrapper.style.setProperty('--gc-entrance-delay', `${entranceDelay}ms`)
 
-      // Wrap the content
-      domRange.surroundContents(wrapper)
+      // Try surroundContents first (works for same-element ranges)
+      try {
+        domRange.surroundContents(wrapper)
+      } catch {
+        // surroundContents fails when range spans multiple elements
+        // Use extractContents + appendChild instead
+        console.log('[GroundCheck] Using extractContents fallback for cross-element range')
+
+        // Extract the contents (removes them from DOM)
+        const contents = domRange.extractContents()
+
+        // Put them in the wrapper
+        wrapper.appendChild(contents)
+
+        // Insert the wrapper where the range was
+        domRange.insertNode(wrapper)
+      }
 
       // Trigger entrance animation after DOM insertion
       requestAnimationFrame(() => {
@@ -224,7 +239,7 @@ export class HighlightManager {
 
       return wrapper
     } catch (error) {
-      // surroundContents can fail if the range spans multiple elements improperly
+      // Still catch any unexpected errors
       console.warn('[GroundCheck] Could not wrap claim text:', error)
       return null
     }

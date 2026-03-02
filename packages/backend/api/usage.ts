@@ -44,10 +44,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get current usage
     const usage = await getUsage(authContext.userId, authContext.deviceFingerprint, dailyLimit)
 
+    // Handle null/undefined current (no usage record yet)
+    const current = usage.current ?? 0
+    // Recalculate remaining based on actual current value
+    const remaining = Math.max(0, dailyLimit - current)
+
     return res.status(200).json({
-      current: usage.current,
-      limit: usage.limit,
-      remaining: usage.remaining,
+      current,
+      limit: dailyLimit,
+      remaining,
       tier: authContext.tier,
       isAuthenticated: authContext.isAuthenticated,
       resetsAt: getNextResetTime(),

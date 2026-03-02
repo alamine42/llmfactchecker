@@ -178,43 +178,58 @@ export async function initializeAuth(): Promise<void> {
 }
 
 /**
+ * Hash a string using SHA-256
+ */
+async function sha256(message: string): Promise<string> {
+  const msgBuffer = new TextEncoder().encode(message)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
  * Sign in with Google OAuth
+ * Uses chrome.identity to get Google ID token, then signs in to Supabase
  */
 export async function signInWithGoogle(): Promise<void> {
   setAuthState({ loading: true, error: null })
 
   try {
     const supabase = getSupabaseClient()
+    const manifest = chrome.runtime.getManifest()
+    const clientId = manifest.oauth2?.client_id
 
-    // Use chrome.identity for OAuth flow
+    if (!clientId) {
+      throw new Error('OAuth client ID not configured in manifest')
+    }
+
     const redirectUrl = chrome.identity.getRedirectURL()
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUrl,
-        skipBrowserRedirect: true,
-      },
-    })
+    // Generate nonce - Google expects SHA256 hash, Supabase expects raw
+    const rawNonce = crypto.randomUUID()
+    const hashedNonce = await sha256(rawNonce)
 
-    if (error) {
-      throw error
-    }
+    // Build Google OAuth URL directly (not through Supabase)
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
+    authUrl.searchParams.set('client_id', clientId)
+    authUrl.searchParams.set('redirect_uri', redirectUrl)
+    authUrl.searchParams.set('response_type', 'id_token')
+    authUrl.searchParams.set('scope', 'openid email profile')
+    authUrl.searchParams.set('nonce', hashedNonce) // Send hashed nonce to Google
+    authUrl.searchParams.set('prompt', 'select_account')
 
-    if (!data.url) {
-      throw new Error('No OAuth URL returned')
-    }
-
-    // Launch OAuth flow with chrome.identity
-    const authUrl = data.url
+    console.log('[Auth] Launching Google OAuth:', authUrl.toString())
 
     chrome.identity.launchWebAuthFlow(
       {
-        url: authUrl,
+        url: authUrl.toString(),
         interactive: true,
       },
       async (callbackUrl) => {
+        console.log('[Auth] OAuth callback received:', callbackUrl)
+
         if (chrome.runtime.lastError) {
+          console.error('[Auth] OAuth error:', chrome.runtime.lastError)
           setAuthState({
             loading: false,
             error: chrome.runtime.lastError.message || 'OAuth flow cancelled',
@@ -231,46 +246,39 @@ export async function signInWithGoogle(): Promise<void> {
         }
 
         try {
-          // Extract tokens from callback URL
+          // Extract ID token from callback URL hash
           const url = new URL(callbackUrl)
           const hashParams = new URLSearchParams(url.hash.substring(1))
-          const accessToken = hashParams.get('access_token')
-          const refreshToken = hashParams.get('refresh_token')
+          const idToken = hashParams.get('id_token')
 
-          if (!accessToken) {
-            // Try query params for code flow
-            const code = url.searchParams.get('code')
-            if (code) {
-              // Exchange code for session
-              const { data: sessionData, error: sessionError } =
-                await supabase.auth.exchangeCodeForSession(code)
+          console.log('[Auth] Got ID token:', !!idToken)
 
-              if (sessionError) {
-                throw sessionError
-              }
+          if (!idToken) {
+            throw new Error('No ID token received from Google')
+          }
 
-              if (sessionData.session) {
-                await handleSuccessfulAuth(sessionData.session)
-              }
-            } else {
-              throw new Error('No access token or code in callback')
-            }
+          // Sign in to Supabase with the Google ID token
+          // Use the raw (unhashed) nonce - Supabase will hash it to verify against Google's
+          console.log('[Auth] Signing in to Supabase with ID token...')
+          const { data, error } = await supabase.auth.signInWithIdToken({
+            provider: 'google',
+            token: idToken,
+            nonce: rawNonce,
+          })
+
+          console.log('[Auth] Supabase signInWithIdToken result:', { data, error })
+
+          if (error) {
+            throw error
+          }
+
+          if (data.session) {
+            await handleSuccessfulAuth(data.session)
           } else {
-            // Set session with tokens
-            const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken || '',
-            })
-
-            if (sessionError) {
-              throw sessionError
-            }
-
-            if (sessionData.session) {
-              await handleSuccessfulAuth(sessionData.session)
-            }
+            throw new Error('No session returned from Supabase')
           }
         } catch (err) {
+          console.error('[Auth] Error in callback handling:', err)
           setAuthState({
             loading: false,
             error: err instanceof Error ? err.message : 'Failed to complete sign in',
@@ -279,6 +287,7 @@ export async function signInWithGoogle(): Promise<void> {
       }
     )
   } catch (err) {
+    console.error('[Auth] Error starting OAuth:', err)
     setAuthState({
       loading: false,
       error: err instanceof Error ? err.message : 'Failed to start sign in',
@@ -290,6 +299,24 @@ export async function signInWithGoogle(): Promise<void> {
  * Handle successful authentication
  */
 async function handleSuccessfulAuth(session: Session): Promise<void> {
+  const supabase = getSupabaseClient()
+
+  // Ensure profile exists (in case trigger didn't run)
+  try {
+    const { error: profileError } = await supabase.from('profiles').upsert(
+      {
+        id: session.user.id,
+        tier: 'free',
+      },
+      { onConflict: 'id' }
+    )
+    if (profileError) {
+      console.warn('[Auth] Failed to ensure profile exists:', profileError)
+    }
+  } catch (err) {
+    console.warn('[Auth] Error creating profile:', err)
+  }
+
   setAuthState({
     isAuthenticated: true,
     user: session.user,
